@@ -1,0 +1,180 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "Lab CFN"
+
+Parameters:
+  LambdaName:
+    Type: String
+    Default: 'MyLabTest'
+
+  ApiName:
+    Type: String
+    Default: 'MyLabTestApi'
+
+  ApiMapping:
+    Type: String
+    Default: 'file'
+
+  ApiStageName:
+    Type: String
+    Default: 'prod'
+
+  S3Name:
+    Type: String
+    Default: 'my-lab-test-bucket'
+
+  CodeS3Name:
+    Type: String
+    Default: my-s3-demo-course
+  CodeObjectKey:
+    Type: String
+    Default: function.zip
+  CodeVersion:
+    Type: String
+
+Resources:
+  LabLambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Code:
+        S3Bucket: !Ref CodeS3Name
+        S3Key: !Ref CodeObjectKey
+        S3ObjectVersion: !Ref CodeVersion
+      Runtime: python3.12
+      FunctionName: !Join [ '', [ !Ref LambdaName, 'Function' ] ]
+      MemorySize: 128
+      Timeout: 3
+      Environment:
+        Variables:
+          LAB_BUCKET_NAME: !Ref LabS3Bucket
+
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: "Allow"
+            Principal:
+              Service:
+                - lambda.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      Policies:
+        - PolicyName: !Join [ '', [ !Ref LambdaName, 'Function', 'CWPolicy' ] ]
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource:
+                  - !Sub
+                    - arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/${lambdaName}:*
+                    - lambdaName: !Join [ '', [ !Ref LambdaName, 'Function' ] ]
+        - PolicyName: !Join [ '', [ !Ref LambdaName, 'Function', 'S3Policy' ] ]
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: 'Allow'
+                Action:
+                  - 's3:PutObject'
+                  - 's3:GetObject'
+                  - 's3:ListBucket'
+                Resource:
+                  - !Sub arn:aws:s3:::${S3Name}
+                  - !Sub arn:aws:s3:::${S3Name}/*
+      RoleName: !Join [ '', [ !Ref LambdaName, 'FunctionRole' ] ]
+
+  LabLambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub
+        - /aws/lambda/${lambdaName}
+        - lambdaName: !Join [ '', [ !Ref LambdaName, 'Function' ] ]
+
+  LabS3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref S3Name
+
+  LabApiGateway:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Name: !Ref ApiName
+      BinaryMediaTypes:
+        - '*/*'
+      EndpointConfiguration:
+        Types:
+          - REGIONAL
+
+  LabApiGatewayMethodPost:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: POST
+      AuthorizationType: NONE
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LabLambdaFunction.Arn}/invocations
+        PassthroughBehavior: WHEN_NO_MATCH
+      ResourceId: !Ref FilePath
+      RestApiId: !Ref LabApiGateway
+      RequestParameters:
+        method.request.querystring.filename: true
+
+  LabApiGatewayMethodGet:
+    Type: AWS::ApiGateway::Method
+    Properties:
+      HttpMethod: GET
+      AuthorizationType: NONE
+      Integration:
+        IntegrationHttpMethod: POST
+        Type: AWS_PROXY
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${LabLambdaFunction.Arn}/invocations
+        PassthroughBehavior: WHEN_NO_MATCH
+      ResourceId: !Ref FilePath
+      RestApiId: !Ref LabApiGateway
+      RequestParameters:
+        method.request.querystring.filename: true
+
+  FilePath:
+    Type: AWS::ApiGateway::Resource
+    Properties:
+      ParentId: !GetAtt LabApiGateway.RootResourceId
+      PathPart: !Ref ApiMapping
+      RestApiId: !Ref LabApiGateway
+
+  LabLambdaResourceBasedPolicyPost:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LabLambdaFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${LabApiGateway}/*/POST/${ApiMapping}
+
+  LabLambdaResourceBasedPolicyGet:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt LabLambdaFunction.Arn
+      Principal: apigateway.amazonaws.com
+      SourceArn: !Sub arn:aws:execute-api:${AWS::Region}:${AWS::AccountId}:${LabApiGateway}/*/GET/${ApiMapping}
+
+  LabApiStage:
+    Type: AWS::ApiGateway::Stage
+    Properties:
+      RestApiId: !Ref LabApiGateway
+      StageName: !Ref ApiStageName
+      DeploymentId: !Ref LabDeployment
+
+  LabDeployment:
+    DependsOn:
+      - LabApiGatewayMethodGet
+      - LabApiGatewayMethodPost
+    Type: AWS::ApiGateway::Deployment
+    Properties:
+      RestApiId: !Ref LabApiGateway
