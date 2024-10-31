@@ -27,5 +27,7 @@ Additional parameters:
 
 API endpoints:
  - ```/file``` - handles uploads/downloads.
-   - POST: upload file. ```filename``` query param is **required**, because no DynamoDB were used to store.
+   - POST: upload file. ```filename``` query param is **required**, because no DynamoDB were used to store (works with **binary**).
+![зображення](https://github.com/user-attachments/assets/012cf7a8-d874-4119-bb08-6b14e5403d65)
+
    - GET: retrieves file. ```filename``` query param is **required**, because no DynamoDB were used to store.
