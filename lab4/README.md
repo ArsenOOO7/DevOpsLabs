@@ -13,15 +13,16 @@ The template contains the following resources:
  - S3 Bucket, which stores files
 
 Parameters:
- - LambdaName - name for the Lambda function (transforms into ```${LambdaName}Function```)
- - ApiName - name for your API Gateway
- - ApiStageName - name for your stage in API Gateway (default 'prod')
- - S3Name - name for your Bucket where the files will be stored
+ - lambda_name - name for the Lambda function (transforms into ```${LambdaName}Function```)
+ - api_name - name for your API Gateway
+ - api_stage_name - name for your stage in API Gateway (default 'prod')
+ - code_s3_name - name for your Bucket where the files will be stored
+ - api_mapping - path for you api (```/file```)
 
 Additional parameters:
- - CodeS3Name - Bucket with Lambda code
- - CodeObjectName - name of the object, that contains Lambda code (```function.zip``` as default)
- - CodeVersion - Object's version (required): this value should be updated after uploading the next version of code to S3 so that CloudFormation can detect the change.
+ - code_s3_name - Bucket with Lambda code
+ - code_object_name - name of the object, that contains Lambda code (```function.zip``` as default)
+ - code_version - Object's version (required): this value should be updated after uploading the next version of code to S3 so that CloudFormation can detect the change.
 
 ---
 
